@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using ManagedBass;
 using ManagedBass.Fx;
 using ManagedBass.Mix;
@@ -125,9 +126,9 @@ namespace YARG.Audio.BASS
             Bass.DeviceBufferLength = 2 * devPeriod;
 
             // Affects Windows only. Forces device names to be in UTF-8 on Windows rather than ANSI.
-            Bass.UnicodeDeviceInformation = true;
+            SetBassPropertyIfAvailable("UnicodeDeviceInformation", true);
             Bass.FloatingPointDSP = true;
-            Bass.VistaTruePlayPosition = false;
+            SetBassPropertyIfAvailable("VistaTruePlayPosition", false);
             Bass.UpdateThreads = GlobalAudioHandler.MAX_THREADS;
 
             // Undocumented BASS_CONFIG_MP3_OLDGAPS config.
@@ -602,6 +603,15 @@ namespace YARG.Audio.BASS
 #endif
 
             return pluginDirectory;
+        }
+
+        private static void SetBassPropertyIfAvailable(string propertyName, bool value)
+        {
+            var property = typeof(Bass).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Static);
+            if (property?.CanWrite == true)
+            {
+                property.SetValue(null, value);
+            }
         }
 
         private static bool CreateMixerHandle(out int mixerHandle)

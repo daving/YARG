@@ -10,6 +10,7 @@ using YARG.Core.Audio;
 using YARG.Core.Game;
 using YARG.Core.Input;
 using YARG.Core.Song;
+using YARG.Integration;
 using YARG.Localization;
 using YARG.Menu.Filters;
 using YARG.Menu.ListMenu;
@@ -142,6 +143,7 @@ namespace YARG.Menu.MusicLibrary
         protected override void OnEnable()
         {
             base.OnEnable();
+            GamenightServerClient.SetQuickplayActive(LibraryMode == MusicLibraryMode.QuickPlay);
 
             _heldInputs.Clear();
 
@@ -347,6 +349,8 @@ namespace YARG.Menu.MusicLibrary
                         onHoldHandler: OnGreenHold,
                         hide: true
                     ),
+                new NavigationScheme.Entry(MenuAction.Select, "Menu.MusicLibrary.RatingNotes",
+                    () => _sidebar.ShowRatingNotesDialog()),
                 new NavigationScheme.Entry(MenuAction.Red, "Menu.Common.Back", Back, hide: true),
                 setListNotEmpty ?
                     new NavigationScheme.Entry(MenuAction.Yellow, "Menu.MusicLibrary.StartSet", StartSetlist) :
@@ -769,6 +773,7 @@ namespace YARG.Menu.MusicLibrary
         protected override void OnDisable()
         {
             base.OnDisable();
+            GamenightServerClient.SetQuickplayActive(false);
             SetSidebarDifficultiesVisible(false);
             _heldInputs.Clear();
 

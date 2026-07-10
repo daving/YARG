@@ -98,6 +98,10 @@ namespace YARG
         {
             SettingsManager.LoadSettings();
             InputManager.Initialize();
+            if (GetComponent<GamenightServerClient>() == null)
+            {
+                gameObject.AddComponent<GamenightServerClient>();
+            }
 
             LoadScene(SceneIndex.Menu);
         }

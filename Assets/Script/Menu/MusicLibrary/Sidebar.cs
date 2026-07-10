@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using YARG.Core;
@@ -103,6 +104,7 @@ namespace YARG.Menu.MusicLibrary
         private float _albumBaseFontSize;
         private float _charterBaseFontSize;
         private float _sourceBaseFontSize;
+        private string _currentRatingNotes = string.Empty;
 
         public void Initialize(MusicLibraryMenu musicLibraryMenu, SongSearchingField songSearchingField)
         {
@@ -131,6 +133,14 @@ namespace YARG.Menu.MusicLibrary
             }
 
             _favoriteButton.Initialize(FavoriteClick);
+
+            _contentRatingImage.raycastTarget = true;
+            var ratingNotesTarget = _contentRatingImage.gameObject.GetComponent<RatingNotesClickTarget>();
+            if (ratingNotesTarget == null)
+            {
+                ratingNotesTarget = _contentRatingImage.gameObject.AddComponent<RatingNotesClickTarget>();
+            }
+            ratingNotesTarget.Initialize(ShowRatingNotesDialog);
         }
 
         public void RefreshFavoriteState()
@@ -215,6 +225,7 @@ namespace YARG.Menu.MusicLibrary
             _charter.text = string.Empty;
             _genre.text = string.Empty;
             _subgenre.text = string.Empty;
+            _currentRatingNotes = string.Empty;
 
             _albumTitleContainer.SetActive(false);
             _sourceContainer.SetActive(false);
@@ -226,6 +237,7 @@ namespace YARG.Menu.MusicLibrary
         private void ShowSongInfo(SongViewType songViewType)
         {
             var songEntry = songViewType.SongEntry;
+            _currentRatingNotes = FormatRatingNotes(songEntry.RatingNotes);
 
             SetWrappedText(_albumTitleContainer, _album, songEntry.Album, ref _albumBaseFontSize);
             SetWrappedText(_sourceContainer, _source, SongSources.SourceToGameName(songEntry.Source), ref _sourceBaseFontSize);
@@ -285,6 +297,50 @@ namespace YARG.Menu.MusicLibrary
 
             _cancellationToken = new();
             LoadAlbumCover(songEntry, _cancellationToken.Token).Forget();
+        }
+
+        public void ShowRatingNotesDialog()
+        {
+            if (DialogManager.Instance == null || DialogManager.Instance.IsDialogShowing)
+            {
+                return;
+            }
+
+            var message = _currentView is SongViewType
+                ? string.IsNullOrWhiteSpace(_currentRatingNotes)
+                    ? "No rating notes are available for this song."
+                    : _currentRatingNotes
+                : "Select a song to view rating notes.";
+
+            DialogManager.Instance.ShowMessage("Rating Notes", message);
+        }
+
+        private static string FormatRatingNotes(string ratingNotes)
+        {
+            if (string.IsNullOrWhiteSpace(ratingNotes))
+            {
+                return string.Empty;
+            }
+
+            return ratingNotes
+                .Replace("\\r\\n", "\n")
+                .Replace("\\n", "\n")
+                .Trim();
+        }
+
+        private sealed class RatingNotesClickTarget : MonoBehaviour, IPointerClickHandler
+        {
+            private Action _onClick;
+
+            public void Initialize(Action onClick)
+            {
+                _onClick = onClick;
+            }
+
+            public void OnPointerClick(PointerEventData eventData)
+            {
+                _onClick?.Invoke();
+            }
         }
 
         // Wrap and shrink long sidebar fields (album/source/charter) if they are too long to fit
