@@ -10,6 +10,7 @@ The base game is still YARG. This fork adds LAN control/status hooks and a song 
 - Polls a Gamenight server for queued song commands.
 - Reports whether the Music Library is open in Quickplay.
 - Reports song start and stop events to the Gamenight server.
+- Posts current song and genre updates to a configured Home Assistant webhook.
 - Starts queued songs only when YARG is on the Quickplay Music Library screen.
 - Adds a `ratingnotes` song metadata field.
 - Shows rating notes from the song rating badge in the Music Library sidebar.
@@ -25,6 +26,12 @@ YARG reads this file from the folder containing `YARG.exe`:
 [Server]
 CommunicationEnabled=true
 ServerBaseUrl=
+
+[HomeAssistant]
+HomeAssistantEnabled=true
+HomeAssistantWebhookUrl=
+HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
 Set `ServerBaseUrl` to the base URL of your Gamenight server, for example:
@@ -33,11 +40,28 @@ Set `ServerBaseUrl` to the base URL of your Gamenight server, for example:
 [Server]
 CommunicationEnabled=true
 ServerBaseUrl=http://your-server-name
+
+[HomeAssistant]
+HomeAssistantEnabled=true
+HomeAssistantWebhookUrl=http://homeassistant.local:8123/api/webhook/your_webhook_id
+HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
-Leave `ServerBaseUrl` blank, or set `CommunicationEnabled=false`, to disable all server communication.
+`CommunicationEnabled=false` disables both the Gamenight server link and Home Assistant webhook calls.
+Leave `ServerBaseUrl` blank to disable only the Gamenight server link. Leave
+`HomeAssistantWebhookUrl` blank, or set `HomeAssistantEnabled=false`, to disable only Home Assistant.
 
-No real server URL is committed in this repository.
+No real server or webhook URL is committed in this repository.
+
+When a song starts, YARG posts two Home Assistant webhook calls in order:
+
+```json
+{ "event": "song-started", "entity_id": "input_text.yarg_currentgenre", "value": "Alternative", "title": "Song Title", "genre": "Alternative" }
+{ "event": "song-started", "entity_id": "input_text.yarg_currentsong", "value": "Song Title", "title": "Song Title", "genre": "Alternative" }
+```
+
+When playback stops, it posts the same two entities in the same genre-then-song order with blank values. A Home Assistant automation can use `trigger.json.entity_id` and `trigger.json.value` to call `input_text.set_value`, or map those values into whatever helper entities you prefer.
 
 ## Expected Server API
 

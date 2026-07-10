@@ -11,16 +11,31 @@ If the file is missing, the integration creates one with:
 [Server]
 CommunicationEnabled=true
 ServerBaseUrl=
+
+[HomeAssistant]
+HomeAssistantEnabled=true
+HomeAssistantWebhookUrl=
+HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
-Set `ServerBaseUrl` to your Gamenight server URL. Leave it blank, or set
-`CommunicationEnabled=false`, to disable the Gamenight server link.
+Set `ServerBaseUrl` to your Gamenight server URL. Set `HomeAssistantWebhookUrl`
+to the LAN webhook URL for Home Assistant, such as
+`http://homeassistant.local:8123/api/webhook/your_webhook_id`.
+
+`CommunicationEnabled=false` disables both the Gamenight server link and Home
+Assistant webhook calls. Leave `ServerBaseUrl` blank to disable only the
+Gamenight server link. Leave `HomeAssistantWebhookUrl` blank, or set
+`HomeAssistantEnabled=false`, to disable only Home Assistant.
 
 ## Integration behavior
 
 - Polls `GET /api/rockband/yarg/commands` for play commands.
 - Posts Quickplay status to `POST /api/rockband/yarg/status`.
 - Posts song start/stop events to `POST /api/rockband/yarg/events`.
+- Posts Home Assistant webhook updates for `input_text.yarg_currentgenre` first,
+  then `input_text.yarg_currentsong`; on stop, both are posted blank in the same
+  order.
 - Starts a queued song only when the YARG music library is open in Quickplay mode.
 
 ## Build from this modified checkout

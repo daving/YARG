@@ -168,7 +168,7 @@ if ((Test-Path -LiteralPath $buildExe) -and $buildExit -eq 0) {
     Write-Host "Build complete:"
     Write-Host $OutputDirectory
     Write-Host ""
-    Write-Host "Copy gamenight-yarg.ini next to YARG.exe and edit ServerBaseUrl if needed."
+    Write-Host "Copy gamenight-yarg.ini next to YARG.exe and edit the server/Home Assistant URLs if needed."
     Copy-Item -LiteralPath (Join-Path $projectRoot "gamenight-yarg.ini") -Destination (Join-Path $OutputDirectory "gamenight-yarg.ini") -Force
     exit 0
 }
@@ -181,7 +181,7 @@ Write-Host "   $projectRoot"
 Write-Host "2. Let Unity finish importing/compiling."
 Write-Host "3. Use File > Build Profiles, select Windows, and build to:"
 Write-Host "   $OutputDirectory"
-Write-Host "4. Copy gamenight-yarg.ini next to the built YARG.exe."
+Write-Host "4. Copy gamenight-yarg.ini next to the built YARG.exe and edit the server/Home Assistant URLs."
 Write-Host ""
 Write-Host "The compile/import step already passed if no exception was thrown above."
 exit 1

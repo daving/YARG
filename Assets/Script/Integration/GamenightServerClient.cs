@@ -27,6 +27,14 @@ namespace YARG.Integration
         private bool _lastPlaying;
         private bool _quickplayActive;
 
+        private bool ServerCommunicationEnabled =>
+            _settings.CommunicationEnabled && !string.IsNullOrWhiteSpace(_settings.ServerBaseUrl);
+
+        private bool HomeAssistantCommunicationEnabled =>
+            _settings.CommunicationEnabled &&
+            _settings.HomeAssistantEnabled &&
+            !string.IsNullOrWhiteSpace(_settings.HomeAssistantWebhookUrl);
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -62,7 +70,7 @@ namespace YARG.Integration
             }
 
             Instance._quickplayActive = active;
-            if (!Instance._settings.CommunicationEnabled)
+            if (!Instance.ServerCommunicationEnabled)
             {
                 return;
             }
@@ -74,7 +82,7 @@ namespace YARG.Integration
         {
             while (enabled)
             {
-                if (_settings.CommunicationEnabled)
+                if (ServerCommunicationEnabled)
                 {
                     using var request = UnityWebRequest.Get(Url("/api/rockband/yarg/commands"));
                     yield return request.SendWebRequest();
@@ -142,7 +150,7 @@ namespace YARG.Integration
 
         private void OnGameStateChange(GameStateFetcher.State state)
         {
-            if (!_settings.CommunicationEnabled)
+            if (!ServerCommunicationEnabled && !HomeAssistantCommunicationEnabled)
             {
                 return;
             }
@@ -155,6 +163,7 @@ namespace YARG.Integration
                     _lastPlaying = true;
                     _lastSongKey = key;
                     StartCoroutine(PostEvent("song-started", state.SongEntry));
+                    StartCoroutine(PostHomeAssistantSongStarted(state.SongEntry));
                 }
             }
             else if (_lastPlaying)
@@ -162,6 +171,7 @@ namespace YARG.Integration
                 _lastPlaying = false;
                 _lastSongKey = "";
                 StartCoroutine(PostEvent("song-ended", null));
+                StartCoroutine(PostHomeAssistantSongEnded());
             }
         }
 
@@ -189,7 +199,7 @@ namespace YARG.Integration
 
         private IEnumerator PostJson(string path, string json)
         {
-            if (!_settings.CommunicationEnabled)
+            if (!ServerCommunicationEnabled)
             {
                 yield break;
             }
@@ -200,6 +210,50 @@ namespace YARG.Integration
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             yield return request.SendWebRequest();
+        }
+
+        private IEnumerator PostHomeAssistantSongStarted(SongEntry song)
+        {
+            var title = song?.Name.Original ?? "";
+            var genre = song?.Genre.Original ?? "";
+
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre);
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentSongEntityId, title, "song-started", title, genre);
+        }
+
+        private IEnumerator PostHomeAssistantSongEnded()
+        {
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", "");
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentSongEntityId, "", "song-ended", "", "");
+        }
+
+        private IEnumerator PostHomeAssistantEntity(string entityId, string value, string eventType, string title, string genre)
+        {
+            if (!HomeAssistantCommunicationEnabled || string.IsNullOrWhiteSpace(entityId))
+            {
+                yield break;
+            }
+
+            var json = JsonConvert.SerializeObject(new HomeAssistantWebhookPayload
+            {
+                Event = eventType,
+                EntityId = entityId,
+                Value = value,
+                Title = title,
+                Genre = genre
+            });
+
+            var bytes = Encoding.UTF8.GetBytes(json);
+            using var request = new UnityWebRequest(_settings.HomeAssistantWebhookUrl, UnityWebRequest.kHttpVerbPOST);
+            request.uploadHandler = new UploadHandlerRaw(bytes);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                YargLogger.LogWarning($"Gamenight Home Assistant webhook failed for {entityId}: {request.error}");
+            }
         }
 
         private string Url(string path)
@@ -232,17 +286,48 @@ namespace YARG.Integration
             public bool? isPlaying;
         }
 
+        private class HomeAssistantWebhookPayload
+        {
+            [JsonProperty("event")]
+            public string Event;
+
+            [JsonProperty("entity_id")]
+            public string EntityId;
+
+            [JsonProperty("value")]
+            public string Value;
+
+            [JsonProperty("title")]
+            public string Title;
+
+            [JsonProperty("genre")]
+            public string Genre;
+        }
+
         private class GamenightIni
         {
             public bool CommunicationEnabled = true;
             public string ServerBaseUrl = string.Empty;
+            public bool HomeAssistantEnabled = true;
+            public string HomeAssistantWebhookUrl = string.Empty;
+            public string HomeAssistantCurrentSongEntityId = "input_text.yarg_currentsong";
+            public string HomeAssistantCurrentGenreEntityId = "input_text.yarg_currentgenre";
 
             public static GamenightIni Load()
             {
                 var path = GetPath();
                 if (!File.Exists(path))
                 {
-                    File.WriteAllText(path, "[Server]\r\nCommunicationEnabled=true\r\nServerBaseUrl=\r\n");
+                    File.WriteAllText(path,
+                        "[Server]\r\n" +
+                        "CommunicationEnabled=true\r\n" +
+                        "ServerBaseUrl=\r\n" +
+                        "\r\n" +
+                        "[HomeAssistant]\r\n" +
+                        "HomeAssistantEnabled=true\r\n" +
+                        "HomeAssistantWebhookUrl=\r\n" +
+                        "HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong\r\n" +
+                        "HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre\r\n");
                 }
 
                 var ini = new GamenightIni();
@@ -270,11 +355,22 @@ namespace YARG.Integration
                     {
                         ini.ServerBaseUrl = value;
                     }
-                }
-
-                if (string.IsNullOrWhiteSpace(ini.ServerBaseUrl))
-                {
-                    ini.CommunicationEnabled = false;
+                    else if (string.Equals(key, "HomeAssistantEnabled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ini.HomeAssistantEnabled = !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else if (string.Equals(key, "HomeAssistantWebhookUrl", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ini.HomeAssistantWebhookUrl = value;
+                    }
+                    else if (string.Equals(key, "HomeAssistantCurrentSongEntityId", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ini.HomeAssistantCurrentSongEntityId = value;
+                    }
+                    else if (string.Equals(key, "HomeAssistantCurrentGenreEntityId", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ini.HomeAssistantCurrentGenreEntityId = value;
+                    }
                 }
 
                 return ini;
