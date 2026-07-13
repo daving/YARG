@@ -15,7 +15,7 @@ ServerBaseUrl=
 [HomeAssistant]
 HomeAssistantEnabled=true
 HomeAssistantWebhookUrl=
-HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantNowPlayingEntityId=input_boolean.yarg_nowplaying
 HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
@@ -34,8 +34,8 @@ Gamenight server link. Leave `HomeAssistantWebhookUrl` blank, or set
 - Posts Quickplay status to `POST /api/rockband/yarg/status`.
 - Posts song start/stop events to `POST /api/rockband/yarg/events`.
 - Posts Home Assistant webhook updates for `input_text.yarg_currentgenre` first,
-  then `input_text.yarg_currentsong`; on stop, both are posted blank in the same
-  order.
+  then `input_boolean.yarg_nowplaying`; on stop, the genre is posted blank and
+  the now-playing boolean is posted as `false` in the same order.
 - Starts a queued song only when the YARG music library is open in Quickplay mode.
 
 ## Build from this modified checkout

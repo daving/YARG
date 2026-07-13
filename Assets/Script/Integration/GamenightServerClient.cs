@@ -218,16 +218,16 @@ namespace YARG.Integration
             var genre = song?.Genre.Original ?? "";
 
             yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre);
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentSongEntityId, title, "song-started", title, genre);
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, true, "song-started", title, genre);
         }
 
         private IEnumerator PostHomeAssistantSongEnded()
         {
             yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", "");
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentSongEntityId, "", "song-ended", "", "");
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, false, "song-ended", "", "");
         }
 
-        private IEnumerator PostHomeAssistantEntity(string entityId, string value, string eventType, string title, string genre)
+        private IEnumerator PostHomeAssistantEntity(string entityId, object value, string eventType, string title, string genre)
         {
             if (!HomeAssistantCommunicationEnabled || string.IsNullOrWhiteSpace(entityId))
             {
@@ -295,7 +295,7 @@ namespace YARG.Integration
             public string EntityId;
 
             [JsonProperty("value")]
-            public string Value;
+            public object Value;
 
             [JsonProperty("title")]
             public string Title;
@@ -310,7 +310,7 @@ namespace YARG.Integration
             public string ServerBaseUrl = string.Empty;
             public bool HomeAssistantEnabled = true;
             public string HomeAssistantWebhookUrl = string.Empty;
-            public string HomeAssistantCurrentSongEntityId = "input_text.yarg_currentsong";
+            public string HomeAssistantNowPlayingEntityId = "input_boolean.yarg_nowplaying";
             public string HomeAssistantCurrentGenreEntityId = "input_text.yarg_currentgenre";
 
             public static GamenightIni Load()
@@ -326,7 +326,7 @@ namespace YARG.Integration
                         "[HomeAssistant]\r\n" +
                         "HomeAssistantEnabled=true\r\n" +
                         "HomeAssistantWebhookUrl=\r\n" +
-                        "HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong\r\n" +
+                        "HomeAssistantNowPlayingEntityId=input_boolean.yarg_nowplaying\r\n" +
                         "HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre\r\n");
                 }
 
@@ -363,9 +363,9 @@ namespace YARG.Integration
                     {
                         ini.HomeAssistantWebhookUrl = value;
                     }
-                    else if (string.Equals(key, "HomeAssistantCurrentSongEntityId", StringComparison.OrdinalIgnoreCase))
+                    else if (string.Equals(key, "HomeAssistantNowPlayingEntityId", StringComparison.OrdinalIgnoreCase))
                     {
-                        ini.HomeAssistantCurrentSongEntityId = value;
+                        ini.HomeAssistantNowPlayingEntityId = value;
                     }
                     else if (string.Equals(key, "HomeAssistantCurrentGenreEntityId", StringComparison.OrdinalIgnoreCase))
                     {

@@ -10,7 +10,7 @@ The base game is still YARG. This fork adds LAN control/status hooks and a song 
 - Polls a Gamenight server for queued song commands.
 - Reports whether the Music Library is open in Quickplay.
 - Reports song start and stop events to the Gamenight server.
-- Posts current song and genre updates to a configured Home Assistant webhook.
+- Posts now-playing state and genre updates to a configured Home Assistant webhook.
 - Starts queued songs only when YARG is on the Quickplay Music Library screen.
 - Adds a `ratingnotes` song metadata field.
 - Shows rating notes from the song rating badge in the Music Library sidebar.
@@ -30,7 +30,7 @@ ServerBaseUrl=
 [HomeAssistant]
 HomeAssistantEnabled=true
 HomeAssistantWebhookUrl=
-HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantNowPlayingEntityId=input_boolean.yarg_nowplaying
 HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
@@ -44,7 +44,7 @@ ServerBaseUrl=http://your-server-name
 [HomeAssistant]
 HomeAssistantEnabled=true
 HomeAssistantWebhookUrl=http://homeassistant.local:8123/api/webhook/your_webhook_id
-HomeAssistantCurrentSongEntityId=input_text.yarg_currentsong
+HomeAssistantNowPlayingEntityId=input_boolean.yarg_nowplaying
 HomeAssistantCurrentGenreEntityId=input_text.yarg_currentgenre
 ```
 
@@ -58,10 +58,10 @@ When a song starts, YARG posts two Home Assistant webhook calls in order:
 
 ```json
 { "event": "song-started", "entity_id": "input_text.yarg_currentgenre", "value": "Alternative", "title": "Song Title", "genre": "Alternative" }
-{ "event": "song-started", "entity_id": "input_text.yarg_currentsong", "value": "Song Title", "title": "Song Title", "genre": "Alternative" }
+{ "event": "song-started", "entity_id": "input_boolean.yarg_nowplaying", "value": true, "title": "Song Title", "genre": "Alternative" }
 ```
 
-When playback stops, it posts the same two entities in the same genre-then-song order with blank values. A Home Assistant automation can use `trigger.json.entity_id` and `trigger.json.value` to call `input_text.set_value`, or map those values into whatever helper entities you prefer.
+When playback stops, it posts the same two entities in the same genre-then-now-playing order: the genre has a blank value and the now-playing boolean has `false`. A Home Assistant automation can use `trigger.json.entity_id` and `trigger.json.value` to call the appropriate `input_text` or `input_boolean` service.
 
 ## Expected Server API
 
