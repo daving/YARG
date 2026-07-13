@@ -19,6 +19,7 @@ namespace YARG.Integration
     public class GamenightServerClient : MonoBehaviour
     {
         private const float PollSeconds = 1.0f;
+        private const int HomeAssistantRequestTimeoutSeconds = 5;
         private const string DiagnosticLogFileName = "gamenight-yarg.log";
 
         public static GamenightServerClient Instance { get; private set; }
@@ -169,7 +170,7 @@ namespace YARG.Integration
                     _lastSongKey = key;
                     WriteDiagnostic($"Song started: {state.SongEntry.Name.Original}");
                     StartCoroutine(PostEvent("song-started", state.SongEntry));
-                    StartCoroutine(PostHomeAssistantSongStarted(state.SongEntry, isPlaying));
+                    PostHomeAssistantSongStarted(state.SongEntry, isPlaying);
                 }
                 else if (_lastPaused != state.Paused)
                 {
@@ -185,7 +186,7 @@ namespace YARG.Integration
                 _lastSongKey = "";
                 WriteDiagnostic("Song ended.");
                 StartCoroutine(PostEvent("song-ended", null));
-                StartCoroutine(PostHomeAssistantSongEnded());
+                PostHomeAssistantSongEnded();
             }
         }
 
@@ -226,13 +227,13 @@ namespace YARG.Integration
             yield return request.SendWebRequest();
         }
 
-        private IEnumerator PostHomeAssistantSongStarted(SongEntry song, bool isPlaying)
+        private void PostHomeAssistantSongStarted(SongEntry song, bool isPlaying)
         {
             var title = song?.Name.Original ?? "";
             var genre = song?.Genre.Original ?? "";
 
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre);
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, "song-started", title, genre);
+            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre));
+            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, "song-started", title, genre));
         }
 
         private IEnumerator PostHomeAssistantNowPlaying(SongEntry song, bool isPlaying, string eventType)
@@ -242,10 +243,10 @@ namespace YARG.Integration
             yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, eventType, title, genre);
         }
 
-        private IEnumerator PostHomeAssistantSongEnded()
+        private void PostHomeAssistantSongEnded()
         {
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", "");
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, false, "song-ended", "", "");
+            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", ""));
+            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, false, "song-ended", "", ""));
         }
 
         private IEnumerator PostHomeAssistantEntity(string entityId, object value, string eventType, string title, string genre)
@@ -268,7 +269,9 @@ namespace YARG.Integration
             using var request = new UnityWebRequest(_settings.HomeAssistantWebhookUrl, UnityWebRequest.kHttpVerbPOST);
             request.uploadHandler = new UploadHandlerRaw(bytes);
             request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = HomeAssistantRequestTimeoutSeconds;
             request.SetRequestHeader("Content-Type", "application/json");
+            WriteDiagnostic($"Home Assistant dispatch: {eventType}: {entityId}={value}");
             yield return request.SendWebRequest();
 
             WriteDiagnostic($"Home Assistant {eventType}: {entityId}={value}; result={request.result}; code={request.responseCode}; error={request.error ?? "none"}");
