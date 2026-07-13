@@ -36,6 +36,8 @@ Gamenight server link. Leave `HomeAssistantWebhookUrl` blank, or set
 - Posts Home Assistant webhook updates for `input_text.yarg_currentgenre` first,
   then `input_boolean.yarg_nowplaying`; on stop, the genre is posted blank and
   the now-playing boolean is posted as `false` in the same order.
+- Writes `gamenight-yarg.log` next to the INI with Home Assistant webhook
+  attempts and their HTTP results.
 - Starts a queued song only when the YARG music library is open in Quickplay mode.
 
 ## Build from this modified checkout

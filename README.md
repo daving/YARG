@@ -63,6 +63,8 @@ When a song starts, YARG posts two Home Assistant webhook calls in order:
 
 When playback stops, it posts the same two entities in the same genre-then-now-playing order: the genre has a blank value and the now-playing boolean has `false`. A Home Assistant automation can use `trigger.json.entity_id` and `trigger.json.value` to call the appropriate `input_text` or `input_boolean` service.
 
+For troubleshooting, YARG writes `gamenight-yarg.log` next to `gamenight-yarg.ini`. It records detected song, pause, resume, and end transitions plus the result of every Home Assistant webhook request.
+
 ## Expected Server API
 
 This fork expects the Gamenight server to provide these endpoints:

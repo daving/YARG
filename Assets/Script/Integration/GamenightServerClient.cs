@@ -19,12 +19,14 @@ namespace YARG.Integration
     public class GamenightServerClient : MonoBehaviour
     {
         private const float PollSeconds = 1.0f;
+        private const string DiagnosticLogFileName = "gamenight-yarg.log";
 
         public static GamenightServerClient Instance { get; private set; }
 
         private GamenightIni _settings;
         private string _lastSongKey;
         private bool _lastPlaying;
+        private bool _lastPaused;
         private bool _quickplayActive;
 
         private bool ServerCommunicationEnabled =>
@@ -45,6 +47,7 @@ namespace YARG.Integration
 
             Instance = this;
             _settings = GamenightIni.Load();
+            WriteDiagnostic($"Started. Home Assistant enabled={HomeAssistantCommunicationEnabled}; webhook={_settings.HomeAssistantWebhookUrl}");
         }
 
         private void OnEnable()
@@ -158,18 +161,29 @@ namespace YARG.Integration
             if (state.CurrentScene == SceneIndex.Gameplay && state.SongEntry != null)
             {
                 var key = state.SongEntry.ActualLocation;
+                var isPlaying = !state.Paused;
                 if (!_lastPlaying || !string.Equals(_lastSongKey, key, StringComparison.OrdinalIgnoreCase))
                 {
                     _lastPlaying = true;
+                    _lastPaused = state.Paused;
                     _lastSongKey = key;
+                    WriteDiagnostic($"Song started: {state.SongEntry.Name.Original}");
                     StartCoroutine(PostEvent("song-started", state.SongEntry));
-                    StartCoroutine(PostHomeAssistantSongStarted(state.SongEntry));
+                    StartCoroutine(PostHomeAssistantSongStarted(state.SongEntry, isPlaying));
+                }
+                else if (_lastPaused != state.Paused)
+                {
+                    _lastPaused = state.Paused;
+                    WriteDiagnostic(state.Paused ? "Song paused." : "Song resumed.");
+                    StartCoroutine(PostHomeAssistantNowPlaying(state.SongEntry, isPlaying, state.Paused ? "song-paused" : "song-resumed"));
                 }
             }
             else if (_lastPlaying)
             {
                 _lastPlaying = false;
+                _lastPaused = false;
                 _lastSongKey = "";
+                WriteDiagnostic("Song ended.");
                 StartCoroutine(PostEvent("song-ended", null));
                 StartCoroutine(PostHomeAssistantSongEnded());
             }
@@ -212,13 +226,20 @@ namespace YARG.Integration
             yield return request.SendWebRequest();
         }
 
-        private IEnumerator PostHomeAssistantSongStarted(SongEntry song)
+        private IEnumerator PostHomeAssistantSongStarted(SongEntry song, bool isPlaying)
         {
             var title = song?.Name.Original ?? "";
             var genre = song?.Genre.Original ?? "";
 
             yield return PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre);
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, true, "song-started", title, genre);
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, "song-started", title, genre);
+        }
+
+        private IEnumerator PostHomeAssistantNowPlaying(SongEntry song, bool isPlaying, string eventType)
+        {
+            var title = song?.Name.Original ?? "";
+            var genre = song?.Genre.Original ?? "";
+            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, eventType, title, genre);
         }
 
         private IEnumerator PostHomeAssistantSongEnded()
@@ -250,6 +271,8 @@ namespace YARG.Integration
             request.SetRequestHeader("Content-Type", "application/json");
             yield return request.SendWebRequest();
 
+            WriteDiagnostic($"Home Assistant {eventType}: {entityId}={value}; result={request.result}; code={request.responseCode}; error={request.error ?? "none"}");
+
             if (request.result != UnityWebRequest.Result.Success)
             {
                 YargLogger.LogWarning($"Gamenight Home Assistant webhook failed for {entityId}: {request.error}");
@@ -259,6 +282,20 @@ namespace YARG.Integration
         private string Url(string path)
         {
             return _settings.ServerBaseUrl.TrimEnd('/') + path;
+        }
+
+        private static void WriteDiagnostic(string message)
+        {
+            try
+            {
+                var installDirectory = Path.GetDirectoryName(Application.dataPath) ?? Application.dataPath;
+                var path = Path.Combine(installDirectory, DiagnosticLogFileName);
+                File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}");
+            }
+            catch
+            {
+                // Diagnostics must never interfere with gameplay or integration calls.
+            }
         }
 
         private static string NormalizePath(string path)
