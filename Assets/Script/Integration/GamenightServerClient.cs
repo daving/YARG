@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -19,8 +21,11 @@ namespace YARG.Integration
     public class GamenightServerClient : MonoBehaviour
     {
         private const float PollSeconds = 1.0f;
-        private const int HomeAssistantRequestTimeoutSeconds = 5;
         private const string DiagnosticLogFileName = "gamenight-yarg.log";
+        private static readonly HttpClient HomeAssistantHttpClient = new()
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
 
         public static GamenightServerClient Instance { get; private set; }
 
@@ -176,7 +181,7 @@ namespace YARG.Integration
                 {
                     _lastPaused = state.Paused;
                     WriteDiagnostic(state.Paused ? "Song paused." : "Song resumed.");
-                    StartCoroutine(PostHomeAssistantNowPlaying(state.SongEntry, isPlaying, state.Paused ? "song-paused" : "song-resumed"));
+                    PostHomeAssistantNowPlaying(state.SongEntry, isPlaying, state.Paused ? "song-paused" : "song-resumed");
                 }
             }
             else if (_lastPlaying)
@@ -232,28 +237,28 @@ namespace YARG.Integration
             var title = song?.Name.Original ?? "";
             var genre = song?.Genre.Original ?? "";
 
-            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre));
-            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, "song-started", title, genre));
+            PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, genre, "song-started", title, genre);
+            PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, "song-started", title, genre);
         }
 
-        private IEnumerator PostHomeAssistantNowPlaying(SongEntry song, bool isPlaying, string eventType)
+        private void PostHomeAssistantNowPlaying(SongEntry song, bool isPlaying, string eventType)
         {
             var title = song?.Name.Original ?? "";
             var genre = song?.Genre.Original ?? "";
-            yield return PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, eventType, title, genre);
+            PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, isPlaying, eventType, title, genre);
         }
 
         private void PostHomeAssistantSongEnded()
         {
-            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", ""));
-            StartCoroutine(PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, false, "song-ended", "", ""));
+            PostHomeAssistantEntity(_settings.HomeAssistantCurrentGenreEntityId, "", "song-ended", "", "");
+            PostHomeAssistantEntity(_settings.HomeAssistantNowPlayingEntityId, false, "song-ended", "", "");
         }
 
-        private IEnumerator PostHomeAssistantEntity(string entityId, object value, string eventType, string title, string genre)
+        private void PostHomeAssistantEntity(string entityId, object value, string eventType, string title, string genre)
         {
             if (!HomeAssistantCommunicationEnabled || string.IsNullOrWhiteSpace(entityId))
             {
-                yield break;
+                return;
             }
 
             var json = JsonConvert.SerializeObject(new HomeAssistantWebhookPayload
@@ -265,20 +270,22 @@ namespace YARG.Integration
                 Genre = genre
             });
 
-            var bytes = Encoding.UTF8.GetBytes(json);
-            using var request = new UnityWebRequest(_settings.HomeAssistantWebhookUrl, UnityWebRequest.kHttpVerbPOST);
-            request.uploadHandler = new UploadHandlerRaw(bytes);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.timeout = HomeAssistantRequestTimeoutSeconds;
-            request.SetRequestHeader("Content-Type", "application/json");
             WriteDiagnostic($"Home Assistant dispatch: {eventType}: {entityId}={value}");
-            yield return request.SendWebRequest();
+            _ = PostHomeAssistantEntityAsync(entityId, value, eventType, json);
+        }
 
-            WriteDiagnostic($"Home Assistant {eventType}: {entityId}={value}; result={request.result}; code={request.responseCode}; error={request.error ?? "none"}");
-
-            if (request.result != UnityWebRequest.Result.Success)
+        private async Task PostHomeAssistantEntityAsync(string entityId, object value, string eventType, string json)
+        {
+            try
             {
-                YargLogger.LogWarning($"Gamenight Home Assistant webhook failed for {entityId}: {request.error}");
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await HomeAssistantHttpClient.PostAsync(_settings.HomeAssistantWebhookUrl, content);
+                WriteDiagnostic($"Home Assistant {eventType}: {entityId}={value}; code={(int) response.StatusCode}; success={response.IsSuccessStatusCode}");
+            }
+            catch (Exception exception)
+            {
+                WriteDiagnostic($"Home Assistant {eventType}: {entityId}={value}; error={exception.Message}");
+                YargLogger.LogWarning($"Gamenight Home Assistant webhook failed for {entityId}: {exception.Message}");
             }
         }
 
